@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:  jenkins
+  namespace: jenkins
+  labels:
+    app:  jenkins
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jenkins
+  template:
+    metadata:
+      labels:
+        app:  jenkins
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 0
+      initContainers:
+        - name: docker-installer
+          image: docker:stable
+          command: ["cp" , "/usr/local/bin/docker" , "/data/docker"]
+          volumeMounts:
+            - name: docker
+              mountPath: "/data"
+        - name: kubectl-installer
+          image: eslamkarim/jenkins-ansible-kubectl
+          command: ["cp" , "/usr/local/bin/kubectl" , "/data/kubectl"]
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: kubectl
+              mountPath: "/data"          
+      containers:
+      - name:  jenkins-container
+        image: jenkins/jenkins:lts
+        ports:
+          - containerPort: 8080
+            protocol: TCP
+          - containerPort: 5000
+            protocol: TCP
+        resources: {}
+        volumeMounts:
+          - name: docker-sock
+            mountPath: /var/run/docker.sock
+          - name: data-disk
+            mountPath: /var/jenkins_home
+          - name: docker
+            subPath: "docker"
+            mountPath: "/usr/local/bin/docker"
+          - name: kubectl
+            subPath: "kubectl"
+            mountPath: "/usr/local/bin/kubectl"
+      volumes:
+        - hostPath:
+            path: /var/run/docker.sock
+            type: ""
+          name: docker-sock
+        - name: data-disk
+          persistentVolumeClaim:
+            claimName: claim-jenkins
+        - name: docker
+          emptyDir: {}
+        - name: kubectl
+          emptyDir: {}
+      restartPolicy: Always
